@@ -180,6 +180,8 @@ export function log(
   });
 }
 
+let isGlobalListenerRegistered = false;
+
 /**
  * Registers global event listeners for uncaught errors and promise rejections.
  * Automatically avoids double logging if the error was already logged.
@@ -189,7 +191,12 @@ export function log(
 export function registerGlobalErrorListeners(
   crashlytics: Crashlytics
 ): () => void {
-  if (typeof window === 'undefined') {
+  if (
+    typeof window === 'undefined' ||
+    isGlobalListenerRegistered ||
+    (crashlytics as CrashlyticsInternal).options?.captureUnhandledErrors ===
+      false
+  ) {
     return () => {};
   }
 
@@ -213,16 +220,30 @@ export function registerGlobalErrorListeners(
   try {
     window.addEventListener('error', errorListener);
     window.addEventListener('unhandledrejection', unhandledRejectionListener);
+    isGlobalListenerRegistered = true;
   } catch (error) {
     console.warn(`Firebase Crashlytics was not initialized:\n`, error);
+    return () => {};
   }
 
+  let isUnsubscribed = false;
   return () => {
-    window.removeEventListener('error', errorListener);
-    window.removeEventListener(
-      'unhandledrejection',
-      unhandledRejectionListener
-    );
+    if (isUnsubscribed) {
+      return;
+    }
+    isUnsubscribed = true;
+    isGlobalListenerRegistered = false;
+    if (typeof window !== 'undefined') {
+      try {
+        window.removeEventListener('error', errorListener);
+        window.removeEventListener(
+          'unhandledrejection',
+          unhandledRejectionListener
+        );
+      } catch {
+        // Ignore errors during removal
+      }
+    }
   };
 }
 

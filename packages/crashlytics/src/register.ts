@@ -31,6 +31,7 @@ import {
   registerListeners,
   startNewSession
 } from './helpers';
+import { registerGlobalErrorListeners } from './api';
 import { CrashlyticsOptions } from './public-types';
 
 // We only import types from this package elsewhere in the `telemetry` package, so this
@@ -100,7 +101,14 @@ export function registerCrashlytics(): void {
 
         // Register relevant event listeners
         const unsubscribeListeners = registerListeners(crashlyticsService);
-        crashlyticsService.unsubscribeListeners(unsubscribeListeners);
+        const unsubscribeGlobalErrorListeners =
+          crashlyticsOptions.captureUnhandledErrors !== false
+            ? registerGlobalErrorListeners(crashlyticsService)
+            : () => {};
+        crashlyticsService.unsubscribeListeners(() => {
+          unsubscribeListeners();
+          unsubscribeGlobalErrorListeners();
+        });
 
         return crashlyticsService;
       },
