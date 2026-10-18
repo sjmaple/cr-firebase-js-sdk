@@ -180,7 +180,10 @@ export function log(
   });
 }
 
-let isGlobalListenerRegistered = false;
+let activeGlobalErrorListener: {
+  crashlytics: Crashlytics;
+  unsubscribe: () => void;
+} | null = null;
 
 /**
  * Registers global event listeners for uncaught errors and promise rejections.
@@ -193,11 +196,17 @@ export function registerGlobalErrorListeners(
 ): () => void {
   if (
     typeof window === 'undefined' ||
-    isGlobalListenerRegistered ||
     (crashlytics as CrashlyticsInternal).options?.captureUnhandledErrors ===
       false
   ) {
     return () => {};
+  }
+
+  if (activeGlobalErrorListener) {
+    if (activeGlobalErrorListener.crashlytics === crashlytics) {
+      return () => {};
+    }
+    activeGlobalErrorListener.unsubscribe();
   }
 
   const errorListener = (event: ErrorEvent): void => {
@@ -220,19 +229,20 @@ export function registerGlobalErrorListeners(
   try {
     window.addEventListener('error', errorListener);
     window.addEventListener('unhandledrejection', unhandledRejectionListener);
-    isGlobalListenerRegistered = true;
   } catch (error) {
     console.warn(`Firebase Crashlytics was not initialized:\n`, error);
     return () => {};
   }
 
   let isUnsubscribed = false;
-  return () => {
+  const unsubscribe = (): void => {
     if (isUnsubscribed) {
       return;
     }
     isUnsubscribed = true;
-    isGlobalListenerRegistered = false;
+    if (activeGlobalErrorListener?.unsubscribe === unsubscribe) {
+      activeGlobalErrorListener = null;
+    }
     if (typeof window !== 'undefined') {
       try {
         window.removeEventListener('error', errorListener);
@@ -245,6 +255,13 @@ export function registerGlobalErrorListeners(
       }
     }
   };
+
+  activeGlobalErrorListener = {
+    crashlytics,
+    unsubscribe
+  };
+
+  return unsubscribe;
 }
 
 /**

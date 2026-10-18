@@ -323,7 +323,7 @@ describe('Top level API', () => {
 
   describe('Global error listener auto-registration', () => {
     let listeners: Record<string, Array<(event: any) => void>>;
-    let originalWindow: typeof window | undefined;
+    let mockedWindow = false;
     let addEventListenerStub: sinon.SinonStub | undefined;
     let removeEventListenerStub: sinon.SinonStub | undefined;
 
@@ -343,13 +343,14 @@ describe('Top level API', () => {
             }
           }
         };
-        originalWindow = undefined;
+        mockedWindow = true;
         Object.defineProperty(global, 'window', {
           value: mockWindow,
           writable: true,
           configurable: true
         });
       } else {
+        mockedWindow = false;
         addEventListenerStub = sinon
           .stub(window, 'addEventListener')
           .callsFake((event: string, cb: any) => {
@@ -368,10 +369,10 @@ describe('Top level API', () => {
       }
     });
 
-    afterEach(() => {
-      if (typeof originalWindow === 'undefined') {
-        delete (global as any).window;
-      }
+    afterEach(async () => {
+      await deleteApp(app);
+      app = getFakeApp();
+
       if (addEventListenerStub) {
         addEventListenerStub.restore();
         addEventListenerStub = undefined;
@@ -379,6 +380,10 @@ describe('Top level API', () => {
       if (removeEventListenerStub) {
         removeEventListenerStub.restore();
         removeEventListenerStub = undefined;
+      }
+      if (mockedWindow) {
+        delete (global as any).window;
+        mockedWindow = false;
       }
     });
 
